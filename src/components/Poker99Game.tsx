@@ -63,7 +63,12 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
         
         // 檢查下一個玩家是否也是AI
         if (nextPlayer && !nextPlayer.isHuman) {
-          setTimeout(() => executeAITurn(), 1000);
+          setIsAITurn(true);
+          setTimeout(() => {
+            executeAITurn();
+          }, 1500); // 延遲一下讓玩家能看到狀態變化
+        } else {
+          setIsAITurn(false);
         }
       } else {
         // AI 出牌
@@ -112,7 +117,12 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
               // 檢查下一個玩家是否也是AI
               const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
               if (nextPlayer && !nextPlayer.isHuman) {
-                setTimeout(() => executeAITurn(), 1000);
+                setIsAITurn(true);
+                setTimeout(() => {
+                  executeAITurn();
+                }, 1500); // 延遲一下讓玩家能看到狀態變化
+              } else {
+                setIsAITurn(false);
               }
             }
           }
@@ -127,7 +137,12 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
             
             // 檢查下一個玩家是否也是AI
             if (nextPlayer && !nextPlayer.isHuman) {
-              setTimeout(() => executeAITurn(), 1000);
+              setIsAITurn(true);
+              setTimeout(() => {
+                executeAITurn();
+              }, 1500); // 延遲一下讓玩家能看到狀態變化
+            } else {
+              setIsAITurn(false);
             }
           }
         }
@@ -145,11 +160,8 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
     const cardInHand = currentPlayer.hand.find(card => card.id === cardId);
     if (!cardInHand) return;
     
-    // 檢查是否可以出這張牌
-    if (!canPlayCard(cardInHand, gameState.centerCard)) {
-      setMessage(`不能出這張牌！需要與中心牌 ${gameState.centerCard?.suit}${gameState.centerCard?.rank} 同花色或同點數`);
-      return;
-    }
+    // 計算新總分
+    const newTotal = calculateNewTotal(totalScore, cardInHand, gameState.centerCard);
     
     // 處理特殊牌
     if (['4', '5', 'J', 'Q', 'K'].includes(cardInHand.rank)) {
@@ -159,9 +171,6 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
       setSelectedCard(cardId);
       return;
     }
-    
-    // 計算新總分
-    const newTotal = calculateNewTotal(totalScore, cardInHand, gameState.centerCard);
     
     // 檢查是否爆掉
     if (checkGameOver(newTotal)) {

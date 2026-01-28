@@ -104,13 +104,8 @@ export const initializeGameState = (numPlayers: number = 4): GameState => {
 
 // 檢查玩家是否可以出牌
 export const canPlayCard = (card: Card, centerCard: Card | null): boolean => {
-  if (!centerCard) return true; // 如果中心沒有牌，可以出任何牌
-  
-  // 4, 5, J, Q, K 可以在任何時候打出（特殊規則）
-  if (['4', '5', 'J', 'Q', 'K'].includes(card.rank)) return true;
-  
-  // 同花色或同點數可以出
-  return card.suit === centerCard.suit || card.rank === centerCard.rank;
+  // 在撲克牌99中，任何牌都可以出，不限制花色或點數
+  return true;
 };
 
 // 計算新總分（考慮各種特殊牌的效果）
