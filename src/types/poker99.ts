@@ -4,7 +4,7 @@ export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 
 export interface Card {
   suit: Suit;
   rank: Rank;
-  value: number; // 數字值，A=1, J=11, Q=12, K=13
+  value: number; // 數字值，A=1, J=10, Q=20, K=99
   id: string;
 }
 
@@ -13,6 +13,7 @@ export interface Player {
   name: string;
   hand: Card[];
   score: number;
+  isHuman: boolean; // 是否為人類玩家
 }
 
 export interface GameState {
@@ -23,4 +24,5 @@ export interface GameState {
   gameStatus: 'waiting' | 'playing' | 'ended';
   winner: string | null;
   round: number;
+  currentTotal: number; // 當前總分
 }

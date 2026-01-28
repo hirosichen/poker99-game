@@ -58,9 +58,10 @@ export const dealCards = (deck: Card[], numPlayers: number, cardsPerPlayer: numb
     
     players.push({
       id: `player-${i + 1}`,
-      name: `玩家 ${i + 1}`,
+      name: i === 0 ? '人類玩家' : `電腦玩家 ${i}`,
       hand,
-      score: 0
+      score: 0,
+      isHuman: i === 0 // 第一個玩家是人類，其餘是電腦
     });
   }
   
@@ -71,7 +72,7 @@ export const dealCards = (deck: Card[], numPlayers: number, cardsPerPlayer: numb
 };
 
 // 初始化遊戲狀態
-export const initializeGameState = (numPlayers: number = 2): GameState => {
+export const initializeGameState = (numPlayers: number = 4): GameState => {
   let deck = createDeck();
   deck = shuffleDeck(deck);
   
@@ -96,7 +97,8 @@ export const initializeGameState = (numPlayers: number = 2): GameState => {
     deck: remainingDeckAfterInitial,
     gameStatus: 'playing',
     winner: null,
-    round: 1
+    round: 1,
+    currentTotal: initialCenterCard ? initialCenterCard.value : 0
   };
 };
 
@@ -153,7 +155,7 @@ export const calculateNewTotal = (currentTotal: number, playedCard: Card, center
 
   // 確保總分不超過99
   if (newTotal > 99) {
-    newTotal = 99; // 根據您的說明，超過99時不爆掉，而是保持在99
+    newTotal = 99;
   }
   
   // 確保總分不小於0
@@ -251,6 +253,7 @@ export const playCard = (gameState: GameState, playerId: string, cardId: string,
     currentPlayerIndex: nextPlayerIndex,
     centerCard: newCenterCard,
     deck: updatedDeck,
+    currentTotal: newTotal,
     winner,
     gameStatus: winner ? 'ended' : 'playing'
   };
@@ -288,4 +291,98 @@ export const drawCard = (gameState: GameState, playerId: string): GameState => {
 // 檢查遊戲是否結束（有人爆掉）
 export const checkGameOver = (total: number): boolean => {
   return total > 99;
+};
+
+// AI 選擇最佳出牌
+export const selectBestMoveForAI = (player: Player, centerCard: Card | null, currentTotal: number, players: Player[]): { cardId: string, newTotal: number } | null => {
+  // 獲取所有可以出的牌
+  const playableCards = player.hand.filter(card => canPlayCard(card, centerCard));
+  
+  if (playableCards.length === 0) {
+    // 如果沒有可出的牌，則返回 null 表示需要抽牌
+    return null;
+  }
+  
+  // 評估每張可出的牌
+  let bestCard: Card | null = null;
+  let bestNewTotal: number = -1;
+  let minRisk = Infinity; // 最小風險值
+  
+  for (const card of playableCards) {
+    // 計算出這張牌後的新總分
+    const newTotal = calculateNewTotal(currentTotal, card, centerCard);
+    
+    // 計算風險值
+    let risk = calculateRisk(newTotal);
+    
+    // 特殊牌的優先級
+    if (card.rank === 'K') { // K = 99，直接將總分設為99
+      // 如果當前總分接近99且低於99，出K可以控制局面
+      risk = 0; // 最低風險
+    } else if (card.rank === 'J') { // J = 跳過下家
+      // 跳過可能即將爆掉的玩家
+      risk -= 5;
+    } else if (card.rank === '4') { // 4 = 迴轉
+      // 迴轉可以讓自己多一次機會
+      risk -= 3;
+    } else if (card.rank === '5') { // 5 = 指定下家
+      // 指定可以控制遊戲流向
+      risk -= 4;
+    }
+    
+    // 如果風險更低，或者風險相同但更接近安全值，則選擇這張牌
+    if (risk < minRisk || (risk === minRisk && Math.abs(newTotal - 90) < Math.abs(bestNewTotal - 90))) {
+      minRisk = risk;
+      bestCard = card;
+      bestNewTotal = newTotal;
+    }
+  }
+  
+  if (bestCard) {
+    return {
+      cardId: bestCard.id,
+      newTotal: bestNewTotal
+    };
+  }
+  
+  return null;
+};
+
+// 計算風險值
+const calculateRisk = (total: number): number => {
+  // 總分越接近99，風險越高
+  if (total >= 90) {
+    // 90以上風險急劇增加
+    return (total - 90) * 10;
+  } else if (total >= 80) {
+    // 80-89中等風險
+    return (total - 80) * 5;
+  } else {
+    // 80以下低風險
+    return 90 - total;
+  }
+};
+
+// AI 抽牌策略
+export const aiShouldDrawCard = (player: Player, currentTotal: number, players: Player[]): boolean => {
+  // 如果手牌少於3張，優先補牌
+  if (player.hand.length < 3) {
+    return true;
+  }
+  
+  // 如果當前總分較高（接近爆掉），且手牌中有安全牌，則優先出牌
+  if (currentTotal > 85) {
+    // 檢查是否有安全牌
+    const safeCards = player.hand.filter(card => {
+      const newTotal = calculateNewTotal(currentTotal, card, null);
+      return newTotal <= 85;
+    });
+    
+    if (safeCards.length > 0) {
+      return false; // 有安全牌，優先出牌
+    }
+  }
+  
+  // 一般情況下，如果手牌數量適中，可以考慮抽牌
+  return Math.random() > 0.7; // 30% 機率抽牌
 };

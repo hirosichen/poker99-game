@@ -1,41 +1,145 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { initializeGameState, playCard, drawCard, canPlayCard, calculateNewTotal, checkGameOver } from '@/lib/poker99-utils';
+import React, { useState, useEffect, useCallback } from 'react';
+import { initializeGameState, playCard, drawCard, canPlayCard, calculateNewTotal, checkGameOver, selectBestMoveForAI, aiShouldDrawCard } from '@/lib/poker99-utils';
 import { Card, Player, GameState } from '@/types/poker99';
 
 interface Poker99GameProps {
   numPlayers?: number;
 }
 
-const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
+const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
   const [gameState, setGameState] = useState<GameState>(() => initializeGameState(numPlayers));
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [message, setMessage] = useState<string>('遊戲開始！');
   const [totalScore, setTotalScore] = useState<number>(0);
   const [showSpecialCardOptions, setShowSpecialCardOptions] = useState<boolean>(false);
   const [specialCardAction, setSpecialCardAction] = useState<{cardId: string, action: string} | null>(null);
+  const [isAITurn, setIsAITurn] = useState<boolean>(false);
 
   // 初始化遊戲
   useEffect(() => {
     const initialGameState = initializeGameState(numPlayers);
     setGameState(initialGameState);
     
-    // 計算初始總分
-    let initialTotal = 0;
-    if (initialGameState.centerCard) {
-      initialTotal = initialGameState.centerCard.rank === 'K' ? 99 : initialGameState.centerCard.value;
-    }
-    setTotalScore(initialTotal);
+    // 設置初始總分
+    setTotalScore(initialGameState.currentTotal);
+    setMessage(`遊戲開始！當前總分: ${initialGameState.currentTotal}，輪到 ${initialGameState.players[initialGameState.currentPlayerIndex]?.name}`);
     
-    setMessage(`遊戲開始！當前總分: ${initialTotal}，輪到 ${initialGameState.players[initialGameState.currentPlayerIndex]?.name}`);
+    // 檢查是否是AI回合
+    const currentPlayer = initialGameState.players[initialGameState.currentPlayerIndex];
+    if (currentPlayer && !currentPlayer.isHuman) {
+      setIsAITurn(true);
+      // 延遲一點執行AI回合，讓玩家能看到當前狀態
+      setTimeout(() => executeAITurn(), 1000);
+    }
   }, [numPlayers]);
+
+  // AI 回合處理
+  const executeAITurn = useCallback(() => {
+    if (gameState.gameStatus !== 'playing') {
+      setIsAITurn(false);
+      return;
+    }
+
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.isHuman) {
+      setIsAITurn(false);
+      return;
+    }
+
+    // AI 思考時間
+    setTimeout(() => {
+      // 決定 AI 要出牌還是抽牌
+      const shouldDraw = aiShouldDrawCard(currentPlayer, gameState.currentTotal, gameState.players);
+      
+      if (shouldDraw && gameState.deck.length > 0) {
+        // AI 抽牌
+        const newGameState = drawCard(gameState, currentPlayer.id);
+        setGameState(newGameState);
+        
+        const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+        setMessage(`${currentPlayer.name} 抽了一張牌！輪到 ${nextPlayer.name}`);
+        
+        // 檢查下一個玩家是否也是AI
+        if (nextPlayer && !nextPlayer.isHuman) {
+          setTimeout(() => executeAITurn(), 1000);
+        }
+      } else {
+        // AI 出牌
+        const move = selectBestMoveForAI(currentPlayer, gameState.centerCard, gameState.currentTotal, gameState.players);
+        
+        if (move) {
+          // 計算新總分
+          const cardToPlay = currentPlayer.hand.find(c => c.id === move.cardId);
+          if (cardToPlay) {
+            const newTotal = calculateNewTotal(gameState.currentTotal, cardToPlay, gameState.centerCard);
+            
+            // 檢查是否爆掉
+            if (checkGameOver(newTotal)) {
+              setMessage(`${currentPlayer.name} 出了 ${cardToPlay.suit}${cardToPlay.rank}！總分超過99，${currentPlayer.name} 爆掉了！`);
+              
+              // 遊戲結束，其他玩家勝利
+              const otherPlayers = gameState.players.filter(p => p.id !== currentPlayer.id);
+              if (otherPlayers.length > 0) {
+                const winner = otherPlayers[0];
+                setTimeout(() => {
+                  setGameState({
+                    ...gameState,
+                    winner: winner.id,
+                    gameStatus: 'ended'
+                  });
+                  setMessage(`${winner.name} 獲勝！`);
+                }, 1000);
+              }
+              return;
+            }
+            
+            // 執行出牌
+            const newGameState = playCard(gameState, currentPlayer.id, move.cardId, newTotal);
+            setGameState(newGameState);
+            setTotalScore(newTotal);
+            
+            if (newGameState.centerCard) {
+              setMessage(`${currentPlayer.name} 出了 ${newGameState.centerCard.suit}${newGameState.centerCard.rank}！總分: ${newTotal}，輪到 ${newGameState.players[newGameState.currentPlayerIndex].name}`);
+            }
+            
+            // 檢查是否有人贏了
+            if (newGameState.winner) {
+              const winner = newGameState.players.find(p => p.id === newGameState.winner);
+              setMessage(`${winner?.name} 贏了！`);
+            } else {
+              // 檢查下一個玩家是否也是AI
+              const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+              if (nextPlayer && !nextPlayer.isHuman) {
+                setTimeout(() => executeAITurn(), 1000);
+              }
+            }
+          }
+        } else {
+          // 沒有可出的牌，AI 抽牌
+          if (gameState.deck.length > 0) {
+            const newGameState = drawCard(gameState, currentPlayer.id);
+            setGameState(newGameState);
+            
+            const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+            setMessage(`${currentPlayer.name} 沒有可出的牌，抽了一張牌！輪到 ${nextPlayer.name}`);
+            
+            // 檢查下一個玩家是否也是AI
+            if (nextPlayer && !nextPlayer.isHuman) {
+              setTimeout(() => executeAITurn(), 1000);
+            }
+          }
+        }
+      }
+    }, 1000);
+  }, [gameState]);
 
   const handleCardClick = (cardId: string) => {
     if (gameState.gameStatus !== 'playing') return;
     
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (!currentPlayer) return;
+    if (!currentPlayer || !currentPlayer.isHuman) return; // 只有人類玩家可以操作
     
     // 檢查是否是當前玩家的手牌
     const cardInHand = currentPlayer.hand.find(card => card.id === cardId);
@@ -91,6 +195,13 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
     if (newGameState.winner) {
       const winner = newGameState.players.find(p => p.id === newGameState.winner);
       setMessage(`${winner?.name} 贏了！`);
+    } else {
+      // 檢查下一個玩家是否是AI
+      const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+      if (nextPlayer && !nextPlayer.isHuman) {
+        setIsAITurn(true);
+        setTimeout(() => executeAITurn(), 1000);
+      }
     }
     
     setSelectedCard(null);
@@ -102,7 +213,7 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
     const { cardId } = specialCardAction;
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     
-    if (!currentPlayer) return;
+    if (!currentPlayer || !currentPlayer.isHuman) return;
     
     const cardToPlay = currentPlayer.hand.find(card => card.id === cardId);
     if (!cardToPlay) return;
@@ -174,13 +285,20 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
     setShowSpecialCardOptions(false);
     setSpecialCardAction(null);
     setSelectedCard(null);
+    
+    // 檢查下一個玩家是否是AI
+    const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+    if (nextPlayer && !nextPlayer.isHuman) {
+      setIsAITurn(true);
+      setTimeout(() => executeAITurn(), 1000);
+    }
   };
 
   const handleDrawCard = () => {
     if (gameState.gameStatus !== 'playing') return;
     
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (!currentPlayer) return;
+    if (!currentPlayer || !currentPlayer.isHuman) return; // 只有人類玩家可以操作
     
     // 檢查是否還有牌可以抽
     if (gameState.deck.length === 0) {
@@ -191,23 +309,46 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
     const newGameState = drawCard(gameState, currentPlayer.id);
     setGameState(newGameState);
     setMessage(`${currentPlayer.name} 抽了一張牌！輪到 ${newGameState.players[newGameState.currentPlayerIndex].name}`);
+    
+    // 檢查下一個玩家是否是AI
+    const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+    if (nextPlayer && !nextPlayer.isHuman) {
+      setIsAITurn(true);
+      setTimeout(() => executeAITurn(), 1000);
+    }
   };
 
   const resetGame = () => {
     const newGameState = initializeGameState(numPlayers);
     setGameState(newGameState);
     
-    // 計算初始總分
-    let initialTotal = 0;
-    if (newGameState.centerCard) {
-      initialTotal = newGameState.centerCard.rank === 'K' ? 99 : newGameState.centerCard.value;
-    }
-    setTotalScore(initialTotal);
+    // 設置初始總分
+    setTotalScore(newGameState.currentTotal);
+    setMessage(`遊戲重新開始！當前總分: ${newGameState.currentTotal}，輪到 ${newGameState.players[newGameState.currentPlayerIndex].name}`);
     
-    setMessage(`遊戲重新開始！當前總分: ${initialTotal}，輪到 ${newGameState.players[newGameState.currentPlayerIndex].name}`);
+    // 檢查是否是AI回合
+    const currentPlayer = newGameState.players[newGameState.currentPlayerIndex];
+    if (currentPlayer && !currentPlayer.isHuman) {
+      setIsAITurn(true);
+      setTimeout(() => executeAITurn(), 1000);
+    }
   };
 
-  const renderCard = (card: Card, onClick?: () => void, isSelected: boolean = false) => {
+  const renderCard = (card: Card, onClick?: () => void, isSelected: boolean = false, hidden: boolean = false) => {
+    if (hidden) {
+      // 隱藏的牌（其他玩家的牌）
+      return (
+        <div
+          className={`
+            w-16 h-28 rounded-md border border-gray-300 flex items-center justify-center
+            bg-gradient-to-br from-blue-500 to-blue-700 text-white
+          `}
+        >
+          <div className="text-4xl">?</div>
+        </div>
+      );
+    }
+
     const suitSymbols = {
       hearts: '♥',
       diamonds: '♦',
@@ -258,12 +399,13 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
       <h1 className="text-3xl font-bold text-center mb-6 text-gray-800">撲克牌99遊戲</h1>
       
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
           <div className="text-lg font-semibold">
             總分: <span className="text-red-600 text-xl font-bold">{totalScore}</span>
           </div>
           <div className="text-lg">
             輪到: <span className="text-blue-600">{gameState.players[gameState.currentPlayerIndex]?.name}</span>
+            {isAITurn && <span className="ml-2 text-orange-500">(AI思考中...)</span>}
           </div>
           <div className="text-lg">
             牌堆剩餘: <span className="font-bold">{gameState.deck.length}</span> 張
@@ -342,13 +484,13 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
           >
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-xl font-bold">
-                {player.name} {index === gameState.currentPlayerIndex && '(當前玩家)'}
+                {player.name} {index === gameState.currentPlayerIndex && '(當前玩家)'} {!player.isHuman && '(AI)'}
               </h2>
               <div className="text-gray-600">手牌: {player.hand.length} 張</div>
             </div>
             
-            {index === gameState.currentPlayerIndex ? (
-              // 當前玩家 - 顯示手牌和操作
+            {player.isHuman ? (
+              // 人類玩家 - 顯示手牌和操作
               <div>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {player.hand.map(card => (
@@ -371,10 +513,12 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 2 }) => {
                 </div>
               </div>
             ) : (
-              // 其他玩家 - 只顯示手牌數量
+              // AI 玩家 - 只顯示手牌數量和隱藏的牌
               <div className="flex flex-wrap gap-2 opacity-70">
-                {player.hand.map((_, idx) => (
-                  <div key={idx} className="w-16 h-28 bg-blue-100 border border-gray-300 rounded-md"></div>
+                {Array.from({ length: player.hand.length }).map((_, idx) => (
+                  <div key={idx}>
+                    {renderCard(player.hand[idx] || { suit: 'hearts', rank: 'A', value: 1, id: `hidden-${idx}` }, undefined, false, true)}
+                  </div>
                 ))}
               </div>
             )}
