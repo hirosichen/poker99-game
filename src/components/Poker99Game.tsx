@@ -125,6 +125,45 @@ const Poker99Game: React.FC<Poker99GameProps> = ({ numPlayers = 4 }) => {
                 setIsAITurn(false);
               }
             }
+          } else {
+            // 如果找不到對應的卡片，AI抽牌作為備用方案
+            if (gameState.deck.length > 0) {
+              const newGameState = drawCard(gameState, currentPlayer.id);
+              setGameState(newGameState);
+              
+              const nextPlayer = newGameState.players[newGameState.currentPlayerIndex];
+              setMessage(`${currentPlayer.name} 沒有找到可出的牌，抽了一張牌！輪到 ${nextPlayer.name}`);
+              
+              // 檢查下一個玩家是否也是AI
+              if (nextPlayer && !nextPlayer.isHuman) {
+                setIsAITurn(true);
+                setTimeout(() => {
+                  executeAITurn();
+                }, 1500); // 延遲一下讓玩家能看到狀態變化
+              } else {
+                setIsAITurn(false);
+              }
+            } else {
+              // 如果牌堆也沒牌了，跳過回合
+              const nextPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+              const nextPlayer = gameState.players[nextPlayerIndex];
+              setMessage(`${currentPlayer.name} 無法出牌也無法抽牌，跳過回合。輪到 ${nextPlayer.name}`);
+              
+              setGameState({
+                ...gameState,
+                currentPlayerIndex: nextPlayerIndex
+              });
+              
+              // 檢查下一個玩家是否也是AI
+              if (nextPlayer && !nextPlayer.isHuman) {
+                setIsAITurn(true);
+                setTimeout(() => {
+                  executeAITurn();
+                }, 1500); // 延遲一下讓玩家能看到狀態變化
+              } else {
+                setIsAITurn(false);
+              }
+            }
           }
         } else {
           // 沒有可出的牌，AI 抽牌
