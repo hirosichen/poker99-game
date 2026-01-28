@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Poker99Game from '@/components/Poker99Game';
+import GameRules from '@/components/GameRules';
 
 export default function Home() {
   const [numPlayers, setNumPlayers] = useState<number>(2);
@@ -12,8 +13,8 @@ export default function Home() {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">撲克牌99遊戲</h1>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            一款有趣的卡牌遊戲，目標是第一個出完手中所有卡牌的玩家獲勝。
-            遊戲規則：只能出與中心牌相同花色或相同點數的牌，9可以當作萬能牌隨時打出。
+            一款有趣的卡牌遊戲，目標是避免讓總分超過99點。出完手中所有卡牌的玩家獲勝，
+            或讓其他玩家爆掉（超過99點）而獲勝。
           </p>
         </div>
         
@@ -36,18 +37,9 @@ export default function Home() {
               </select>
             </div>
           </div>
-          
-          <div className="text-sm text-gray-600 mb-4 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold mb-2">遊戲規則：</h3>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>每位玩家開始時有5張牌</li>
-              <li>只能出與中心牌相同花色或相同點數的牌</li>
-              <li>9是特殊牌，可以隨時打出（視為99，回到當前玩家）</li>
-              <li>第一個出完手中所有卡牌的玩家獲勝</li>
-              <li>當玩家出牌後，若手牌少於5張則自動補牌</li>
-            </ul>
-          </div>
         </div>
+        
+        <GameRules />
         
         <Poker99Game numPlayers={numPlayers} />
       </div>
