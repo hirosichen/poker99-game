@@ -307,6 +307,47 @@ export const selectBestMoveForAI = (player: Player, centerCard: Card | null, cur
     // 計算出這張牌後的新總分
     const newTotal = calculateNewTotal(currentTotal, card, centerCard);
     
+    // 如果當前總分已是99，則不能讓總分超過99，只能減少分數或使用特殊牌
+    if (currentTotal === 99) {
+      // 當總分是99時，只有特定牌能降低分數或改變局面
+      if (card.rank === '10') {
+        // 10 會使分數變為 99-10=89
+        const potentialNewTotal = currentTotal - 10;
+        const risk = calculateRisk(potentialNewTotal);
+        if (risk < minRisk) {
+          minRisk = risk;
+          bestCard = card;
+          bestNewTotal = potentialNewTotal;
+        }
+      } else if (card.rank === '4') {
+        // 4 是迴轉，不會改變總分，但會改變順序
+        const risk = calculateRisk(currentTotal);
+        if (risk < minRisk) {
+          minRisk = risk;
+          bestCard = card;
+          bestNewTotal = currentTotal;
+        }
+      } else if (card.rank === 'Q') {
+        // Q 會使分數變為 99-20=79
+        const potentialNewTotal = currentTotal - 20;
+        const risk = calculateRisk(potentialNewTotal);
+        if (risk < minRisk) {
+          minRisk = risk;
+          bestCard = card;
+          bestNewTotal = potentialNewTotal;
+        }
+      } else if (card.rank === 'J' || card.rank === '5') {
+        // J 和 5 不改變總分，但會影響遊戲流程
+        const risk = calculateRisk(currentTotal);
+        if (risk < minRisk) {
+          minRisk = risk;
+          bestCard = card;
+          bestNewTotal = currentTotal;
+        }
+      }
+      continue; // 繼續檢查其他可能的牌
+    }
+    
     // 計算風險值
     let risk = calculateRisk(newTotal);
     
@@ -333,10 +374,40 @@ export const selectBestMoveForAI = (player: Player, centerCard: Card | null, cur
     }
   }
   
+  // 如果在總分為99時找不到合適的牌，則隨便選一張（根據規則，必須出牌）
+  if (currentTotal === 99 && bestCard === null && playableCards.length > 0) {
+    // 找到第一張不是K的牌（因為K會讓總分變回99，而我們想要改變局面）
+    const nonKCard = playableCards.find(card => card.rank !== 'K');
+    if (nonKCard) {
+      const newTotal = calculateNewTotal(currentTotal, nonKCard, centerCard);
+      return {
+        cardId: nonKCard.id,
+        newTotal: newTotal
+      };
+    } else {
+      // 如果只有K可出，也只能出了
+      const kCard = playableCards[0]; // 必定是K
+      return {
+        cardId: kCard.id,
+        newTotal: 99
+      };
+    }
+  }
+  
   if (bestCard) {
     return {
       cardId: bestCard.id,
       newTotal: bestNewTotal
+    };
+  }
+  
+  // 如果找不到最佳牌，但有可出的牌，則隨便選一張
+  if (playableCards.length > 0) {
+    const randomCard = playableCards[Math.floor(Math.random() * playableCards.length)];
+    const newTotal = calculateNewTotal(currentTotal, randomCard, centerCard);
+    return {
+      cardId: randomCard.id,
+      newTotal: newTotal
     };
   }
   
